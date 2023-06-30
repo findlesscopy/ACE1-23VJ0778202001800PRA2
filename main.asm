@@ -63,6 +63,9 @@ mensaje_ventas_resumen db "-----==Resumen de Ventas==-----",0a,"$"
 menu_ventas_registrar db "(R)egistrar venta",0a,"$"
 menu_ventas_resumen_ventas db "(V)er resumen de ventas",0a,"$"
 
+pedir_cod_ventas db "Ingrese el codigo del producto: ",0a,"$"
+
+
 ; MENU HERRAMIENTAS
 mensaje_herramientas db "-----==Menu Herramientas==-----",0a,"$"
 mensaje_herramientas_catalogo db "-----==Catalogo de productos==-----",0a,"$"
@@ -107,15 +110,24 @@ cod_name    db    21 dup (0)
 cod_price   db    05 dup (0)
 cod_units   db    05 dup (0)
 ;;
+;; "ESTRUCTURA VENTA"
+cod_prod_venta    db    05 dup (0)
+cod_units_venta   db    05 dup (0)
+;;
 ;; numéricos
 num_price   dw    0000
 num_units   dw    0000
 ;; archivo productos
 archivo_prods    db   "PROD.BIN",00
 handle_prods     dw   0000
+
+;;
+archivo_vents    db   "VENT.BIN",00
+handle_vents     dw   0000
 ;;
 nombre_rep1      db   "CATALG.HTM",00
 handle_reps      dw   0000
+
 ;;
 .CODE
 .STARTUP
@@ -687,12 +699,149 @@ menu_ventas:
 		
 		jmp menu_ventas
 
-ventas_registrar:
+ventas_registrar_msg:
 		mov DX, offset mensaje_ventas_registrar
+		mov AH, 09
+		int 21	
+
+		mov DX, offset nueva_lin
 		mov AH, 09
 		int 21
 
-		jmp fin
+ventas_registrar:
+		mov DX, offset prompt_code
+		mov AH, 09
+		int 21
+
+		mov DX, offset buffer_entrada
+		mov AH, 0a
+		int 21
+
+		mov DI, offset buffer_entrada
+		inc DI
+		mov AL, [DI]
+		cmp AL, 00
+		je  ventas_registrar
+		cmp AL, 05  ;; tamaño máximo del campo
+		jb  aceptar_tam_cod_venta ;; jb --> jump if below
+		mov DX, offset nueva_lin
+		mov AH, 09
+		int 21
+		jmp ventas_registrar
+
+aceptar_tam_cod_venta:
+		mov SI, offset cod_prod_venta
+		mov DI, offset buffer_entrada
+		inc DI
+		mov CH, 00
+		mov CL, [DI]
+		inc DI 
+
+copiar_codigo_ventas:
+		mov AL, [DI]
+		mov [SI], AL
+		inc SI
+		inc DI
+		loop copiar_codigo_ventas  ;; restarle 1 a CX, verificar que CX no sea 0, si no es 0 va a la etiqueta, 
+		;;; la cadena ingresada en la estructura
+		;;;
+		mov DX, offset nueva_lin
+		mov AH, 09
+		int 21
+
+pedir_de_nuevo_unidades_ventas:
+		mov DX, offset prompt_units
+		mov AH, 09
+		int 21
+		mov DX, offset buffer_entrada
+		mov AH, 0a
+		int 21
+		;;; verificar que el tamaño del codigo no sea mayor a 5
+		mov DI, offset buffer_entrada
+		inc DI
+		mov AL, [DI]
+		cmp AL, 00
+		je  pedir_de_nuevo_unidades_ventas
+		cmp AL, 06  ;; tamaño máximo del campo
+		jb  aceptar_tam_unidades_vents ;; jb --> jump if below
+		mov DX, offset nueva_lin
+		mov AH, 09
+		int 21
+		jmp pedir_de_nuevo_unidades_ventas
+		;;; mover al campo codigo en la estructura producto
+aceptar_tam_unidades_vents:
+		mov SI, offset cod_units_venta
+		mov DI, offset buffer_entrada
+		inc DI
+		mov CH, 00
+		mov CL, [DI]
+		inc DI  ;; me posiciono en el contenido del buffer
+copiar_unidades_vents:
+		mov AL, [DI]
+		mov [SI], AL
+		inc SI
+		inc DI
+		loop copiar_unidades_vents  ;; restarle 1 a CX, verificar que CX no sea 0, si no es 0 va a la etiqueta, 
+		;;
+		mov DI, offset cod_units_venta
+		call cadenaAnum
+		;; AX -> numero convertido
+		mov [num_units], AX
+		;;
+		mov DI, offset cod_units_venta
+		mov CX, 0005
+		call memset
+		;; finalizó pedir datos de producto
+		;;
+		;;
+		;;
+		;;
+		;; GUARDAR EN ARCHIVO
+		;; probar abrirlo normal
+		mov AL, 02
+		mov AH, 3d
+		mov DX, offset archivo_vents
+		int 21
+		;; si no lo cremos
+		jc  crear_archivo_vents
+		;; si abre escribimos
+		jmp guardar_handle_vents
+
+crear_archivo_vents:
+		mov CX, 0000
+		mov DX, offset archivo_vents
+		mov AH, 3c
+		int 21
+
+guardar_handle_vents:
+
+		;; guardamos handle
+		mov [handle_vents], AX
+		;; obtener handle
+		mov BX, [handle_vents]
+		;; vamos al final del archivo
+		mov CX, 00
+		mov DX, 00
+		mov AL, 02
+		mov AH, 42
+		int 21
+		;; escribir el producto en el archivo
+		;; escribí los dos primeros campos
+		mov CX, 26
+		mov DX, offset cod_prod_venta
+		mov AH, 40
+		int 21
+		;; escribo los otros dos
+		mov CX, 0004
+		mov DX, offset cod_units_venta
+		mov AH, 40
+		int 21
+		;; cerrar archivo
+		mov AH, 3e
+		int 21
+		;;
+		jmp menu_ventas
+
 ventas_resumen:
 		mov DX, offset mensaje_ventas_resumen
 		mov AH, 09
